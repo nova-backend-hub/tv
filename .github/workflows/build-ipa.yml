@@ -1,0 +1,47 @@
+name: Build tv.ipa
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned tv.app
+        run: |
+          xcodebuild \
+            -project tv.xcodeproj \
+            -scheme tv \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform/iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CONFIGURATION_BUILD_DIR="$PWD/build/Release-iphoneos" \
+            build
+
+      - name: Package tv.ipa
+        run: |
+          mkdir -p build/Payload
+          cp -R build/Release-iphoneos/tv.app build/Payload/tv.app
+          cd build
+          zip -qry tv.ipa Payload
+
+      - name: Upload tv.ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv-ipa
+          path: build/tv.ipa
+          if-no-files-found: error

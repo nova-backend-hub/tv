@@ -1,0 +1,15 @@
+class LightingModel {
+  start() {
+  }
+  finish() {
+  }
+  direct() {
+  }
+  indirectDiffuse() {
+  }
+  indirectSpecular() {
+  }
+  ambientOcclusion() {
+  }
+}
+export default LightingModel;

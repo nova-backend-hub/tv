@@ -1,0 +1,36 @@
+name: tv
+options:
+  bundleIdPrefix: dev.couchtv
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_BITCODE: NO
+targets:
+  tv:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: tv/Sources
+      - path: tv/Assets.xcassets
+      - path: tv/www
+        type: folder
+    info:
+      path: tv/Info.plist
+    settings:
+      base:
+        PRODUCT_NAME: tv
+        PRODUCT_BUNDLE_IDENTIFIER: dev.couchtv.tv
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+    frameworks:
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
+      - sdk: CoreMotion.framework
+      - sdk: Network.framework
