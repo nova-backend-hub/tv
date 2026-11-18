@@ -2,7 +2,6 @@ import UIKit
 import WebKit
 
 final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
-    private var server: LocalAssetServer?
     private var webView: WKWebView!
     private var motionBridge: MotionBridge!
 
@@ -12,68 +11,24 @@ final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate
         set { UserDefaults.standard.set(newValue, forKey: ipKey) }
     }
 
-    private let segment = UISegmentedControl(items: ["Menu", "Kart Remote", "Kart Game"])
-    private let ipButton = UIButton(type: .system)
-
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-
-        server = LocalAssetServer(port: 18080)
-        server?.start()
-
-        setupTopBar()
         setupWebView()
         motionBridge = MotionBridge(webView: webView)
-        loadMode(index: 0)
+
+        let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(editIP))
+        twoFingerTap.numberOfTouchesRequired = 2
+        twoFingerTap.numberOfTapsRequired = 2
+        view.addGestureRecognizer(twoFingerTap)
+
+        loadTV()
     }
 
     deinit {
         motionBridge?.stop()
-        server?.stop()
-    }
-
-    private func setupTopBar() {
-        let bar = UIView()
-        bar.backgroundColor = UIColor(white: 0.08, alpha: 0.96)
-        bar.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(bar)
-
-        segment.selectedSegmentIndex = 0
-        segment.backgroundColor = UIColor(white: 0.16, alpha: 1)
-        segment.selectedSegmentTintColor = UIColor(red: 0.16, green: 0.48, blue: 1.0, alpha: 1)
-        segment.setTitleTextAttributes([.foregroundColor: UIColor.lightGray, .font: UIFont.systemFont(ofSize: 12, weight: .semibold)], for: .normal)
-        segment.setTitleTextAttributes([.foregroundColor: UIColor.white, .font: UIFont.systemFont(ofSize: 12, weight: .bold)], for: .selected)
-        segment.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
-        segment.translatesAutoresizingMaskIntoConstraints = false
-
-        ipButton.setTitle(tvIP, for: .normal)
-        ipButton.setTitleColor(.white, for: .normal)
-        ipButton.titleLabel?.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
-        ipButton.backgroundColor = UIColor(white: 0.18, alpha: 1)
-        ipButton.layer.cornerRadius = 8
-        ipButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 8, bottom: 5, right: 8)
-        ipButton.addTarget(self, action: #selector(editIP), for: .touchUpInside)
-        ipButton.translatesAutoresizingMaskIntoConstraints = false
-
-        bar.addSubview(segment)
-        bar.addSubview(ipButton)
-
-        NSLayoutConstraint.activate([
-            bar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            bar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            bar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bar.heightAnchor.constraint(equalToConstant: 42),
-
-            segment.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 10),
-            segment.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
-
-            ipButton.leadingAnchor.constraint(greaterThanOrEqualTo: segment.trailingAnchor, constant: 8),
-            ipButton.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -10),
-            ipButton.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
-        ])
     }
 
     private func setupWebView() {
@@ -87,13 +42,14 @@ final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate
         webView.backgroundColor = .black
         webView.isOpaque = false
         webView.scrollView.backgroundColor = .black
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
 
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 42),
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -101,42 +57,29 @@ final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate
     }
 
     private func makeBridgeScript() -> WKUserScript {
-        let ip = tvIP
         let js = """
         (function() {
-          window.__TV_IP__ = \(jsonString(ip));
-          try { localStorage.setItem('tv.ip', window.__TV_IP__); } catch (e) {}
+          try {
+            Object.defineProperty(window, 'isSecureContext', {
+              configurable: true,
+              get: function() { return true; }
+            });
+          } catch (e) {}
 
-          var base5400 = 'http://' + window.__TV_IP__ + ':5400';
-          function rewriteUrl(u) {
+          function rewriteKartUrl(u) {
             if (typeof u !== 'string') return u;
-            if (/^\\/(api|events|art|img|tv)(\\/|\\?|$)/.test(u)) {
-              return base5400 + u;
-            }
-            if (/^https:\\/\\/[^\\/]+:(8485|5443)\\/controller/.test(u)) {
-              return 'http://127.0.0.1:18080/kart/controller.html';
-            }
-            return u;
+            return u.replace(/^https:\\/\\/([^\\/:]+):8485(\\/.*)?$/, 'http://$1:8484$2')
+                    .replace(/^https:\\/\\/([^\\/:]+):5443(\\/.*)?$/, 'http://$1:5400$2');
           }
 
-          var origFetch = window.fetch;
-          if (origFetch) {
-            window.fetch = function(input, init) {
-              if (typeof input === 'string') input = rewriteUrl(input);
-              else if (input && typeof input.url === 'string') {
-                var nu = rewriteUrl(input.url);
-                if (nu !== input.url) input = new Request(nu, input);
-              }
-              return origFetch.call(this, input, init);
-            };
-          }
-
-          var OrigES = window.EventSource;
-          if (OrigES) {
-            window.EventSource = function(url, cfg) {
-              return new OrigES(rewriteUrl(url), cfg);
-            };
-            window.EventSource.prototype = OrigES.prototype;
+          // Rewrite iframe src="https://...:8485/controller" -> "http://...:8484/controller"
+          var desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+          if (desc && desc.set) {
+            Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
+              configurable: true,
+              get: desc.get,
+              set: function(v) { return desc.set.call(this, rewriteKartUrl(v)); }
+            });
           }
 
           if (typeof DeviceOrientationEvent !== 'undefined') {
@@ -152,7 +95,7 @@ final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate
             };
           }
 
-          window.__nativeMotion = function(a, b, g, ax, ay, az, rx, ry, rz) {
+          function fireMotion(a, b, g, ax, ay, az, rx, ry, rz) {
             var oe = new Event('deviceorientation');
             oe.alpha = a; oe.beta = b; oe.gamma = g; oe.absolute = false;
             window.dispatchEvent(oe);
@@ -163,38 +106,53 @@ final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate
             me.rotationRate = { alpha: rz, beta: rx, gamma: ry };
             me.interval = 16.6;
             window.dispatchEvent(me);
+          }
+
+          window.__nativeMotion = function(a, b, g, ax, ay, az, rx, ry, rz) {
+            fireMotion(a, b, g, ax, ay, az, rx, ry, rz);
+            var frames = document.querySelectorAll('iframe');
+            for (var i = 0; i < frames.length; i++) {
+              try {
+                frames[i].contentWindow.postMessage({
+                  type: '__nativeMotion',
+                  args: [a, b, g, ax, ay, az, rx, ry, rz]
+                }, '*');
+              } catch (e) {}
+            }
           };
+
+          window.addEventListener('message', function(ev) {
+            if (ev.data && ev.data.type === '__nativeMotion' && Array.isArray(ev.data.args)) {
+              fireMotion.apply(null, ev.data.args);
+            }
+          });
         })();
         """
         return WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: false)
     }
 
-    private func jsonString(_ s: String) -> String {
-        let data = try? JSONSerialization.data(withJSONObject: [s], options: [])
-        let arr = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"192.168.1.115\"]"
-        return String(arr.dropFirst().dropLast())
+    private func loadTV() {
+        guard let url = URL(string: "http://\(tvIP):5400/") else { return }
+        webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10))
     }
 
-    @objc private func segmentChanged() {
-        loadMode(index: segment.selectedSegmentIndex)
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        showOfflineError(error.localizedDescription)
     }
 
-    private func loadMode(index: Int) {
-        let path: String
-        switch index {
-        case 1:
-            path = "http://127.0.0.1:18080/kart/controller.html"
-            motionBridge.start()
-        case 2:
-            path = "http://127.0.0.1:18080/kart/games/mario-kart/index.html"
-            motionBridge.stop()
-        default:
-            path = "http://127.0.0.1:18080/"
-            motionBridge.stop()
-        }
-        if let url = URL(string: path) {
-            webView.load(URLRequest(url: url))
-        }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        showOfflineError(error.localizedDescription)
+    }
+
+    private func showOfflineError(_ detail: String) {
+        let alert = UIAlertController(
+            title: "Can't reach TV (\(tvIP))",
+            message: "\(detail)\n\nMake sure CouchTV is running on your TV and your iPhone is on the same Wi-Fi.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Retry", style: .default) { _ in self.loadTV() })
+        alert.addAction(UIAlertAction(title: "Change IP", style: .default) { _ in self.editIP() })
+        present(alert, animated: true)
     }
 
     @objc private func editIP() {
@@ -208,10 +166,7 @@ final class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate
             let val = alert.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !val.isEmpty else { return }
             self.tvIP = val
-            self.ipButton.setTitle(val, for: .normal)
-            self.webView.configuration.userContentController.removeAllUserScripts()
-            self.webView.configuration.userContentController.addUserScript(self.makeBridgeScript())
-            self.loadMode(index: self.segment.selectedSegmentIndex)
+            self.loadTV()
         })
         present(alert, animated: true)
     }

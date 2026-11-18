@@ -14,3 +14,4 @@ GitHub Actions automatically builds `tv.ipa` on every push to `main` via `.githu
 2. Download the **tv-ipa** artifact (`tv.ipa`).
 3. Sideload `tv.ipa` onto your iPhone using **Sideloadly** or **AltServer** with your Apple ID.
 4. Tap the IP button in the top-right corner of the app if your TV's IP changes from `192.168.1.115`.
+

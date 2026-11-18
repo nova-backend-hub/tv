@@ -17,8 +17,6 @@ targets:
     sources:
       - path: tv/Sources
       - path: tv/Assets.xcassets
-      - path: tv/www
-        type: folder
     info:
       path: tv/Info.plist
     settings:
@@ -33,4 +31,3 @@ targets:
       - sdk: UIKit.framework
       - sdk: WebKit.framework
       - sdk: CoreMotion.framework
-      - sdk: Network.framework

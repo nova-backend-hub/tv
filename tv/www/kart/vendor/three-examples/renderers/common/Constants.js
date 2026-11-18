@@ -1,8 +1,0 @@
-export const AttributeType = {
-  VERTEX: 1,
-  INDEX: 2,
-  STORAGE: 4
-};
-export const GPU_CHUNK_BYTES = 16;
-export const BlendColorFactor = 211;
-export const OneMinusBlendColorFactor = 212;
